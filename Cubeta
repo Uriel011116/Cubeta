@@ -1,0 +1,305 @@
+float dt = 1/5.0;
+PVector gravity = new PVector(0.0, 9.8);
+int numParticles = 500;
+int tamParticles = 10;
+float spring = 0.5;
+float friction = 0.9;
+Particle[] particles = new Particle[numParticles];
+Grid grid;
+int margen = 80;
+Cubeta cubeta;
+int modeloActual = 2;
+color[] colores = {color(255, 0, 0), color(0, 255, 0), color(0, 0, 255), color(255, 255, 0), color(255, 0, 255), color(0, 255, 255)};
+ 
+void setup() {
+  size(640, 640);
+  cubeta = new Cubeta();
+  for (int i = 0; i < numParticles; i++) {
+    particles[i] = new Particle(random(margen, width-margen), random(margen, height-margen), tamParticles, i);
+  }
+  noStroke();
+  fill(255, 204);
+}
+ 
+void draw() {
+  background(0);
+ 
+  grid = new Grid(margen);
+   
+  for (Particle particle : particles) {
+    grid.insertar(particle.location, particle);
+  }
+   
+  for (Particle particle : particles) {
+    particle.setVecinos();
+    if (modeloActual == 1) {
+      particle.collide1();
+    } else {
+      particle.collide2();
+    }
+    particle.move();
+    particle.display(); 
+  }
+   
+  grid.display();
+  cubeta.display();
+   
+  fill(255);
+  text(frameRate, 20, 30);
+  text("1=Velocidad salida", 23, 50);
+  text("2=Muelle", 23, 70);
+}
+
+void keyPressed() {
+  int num = parseInt(key) - 48;
+   
+  if (num == 1 && modeloActual == 2) {
+    modeloActual = 1;
+    particles = new Particle[numParticles];
+    for (int i = 0; i < numParticles; i++) {
+      particles[i] = new Particle(random(margen, width-margen), random(margen, height-margen), tamParticles, i);
+    }
+  } 
+  
+  else if (num == 2 && modeloActual == 1) {
+    modeloActual = 2;
+    particles = new Particle[numParticles];
+    for (int i = 0; i < numParticles; i++) {
+      particles[i] = new Particle(random(margen, width-margen), random(margen, height-margen), tamParticles, i);
+    }
+  }
+}
+
+class Cubeta {
+  ArrayList<Plano> planos;
+   
+  Cubeta() {
+    planos = new ArrayList<Plano>();
+     
+    Plano bordeDerecha = new Plano(width+margen, margen, width-margen*2, height-margen);
+    Plano bordeAbajo = new Plano(width-margen*2, height-margen, margen*2, height-margen);
+    Plano bordeIzquierda = new Plano(margen*2, height-margen, -margen, margen);
+     
+    planos.add(bordeDerecha);
+    planos.add(bordeAbajo);
+    planos.add(bordeIzquierda);
+  }
+   
+  void display() {
+    for (Plano plano : planos) {
+      plano.display();
+    }
+  }
+}
+
+class Grid {
+  ArrayList<ArrayList<Particle>> grid;
+  int cell_size;
+  int num_cellsX;
+  int num_cellsY;
+  int num_cells;
+   
+  Grid(int tam_celda) {
+    cell_size = tam_celda;
+     
+    grid = new ArrayList<ArrayList<Particle>>();
+     
+    num_cellsX = width / cell_size;
+    num_cellsY = height / cell_size;
+    num_cells = num_cellsX * num_cellsY;
+     
+    for (int i = 0; i < num_cells; i++) {
+      grid.add(new ArrayList<Particle>());
+    }
+  }
+   
+  int insertar(PVector pos, Particle p) {
+    int indexX = floor(pos.x / cell_size);
+    int indexY = floor(pos.y / cell_size);
+    int cell = num_cellsX * indexY + indexX;
+     
+    if (cell >= 0 && cell <= num_cells-1) {
+      grid.get(cell).add(p);
+      p.celdaActual = cell;
+    }
+     
+    return cell;
+  }
+   
+  ArrayList getVecinos(PVector pos) {
+    ArrayList<Particle> L = new ArrayList<Particle>();
+    int indexX = floor(pos.x / cell_size);
+    int indexY = floor(pos.y / cell_size);
+    int cell;
+     
+    for (int i = indexX-1; i <= indexX+1; i++) {
+      for (int j = indexY-1; j <= indexY+1; j++) {
+        cell = num_cellsX * j + i;
+        if (cell >= 0 && cell <= num_cells-1) {
+          L.addAll(grid.get(cell));
+        }
+      }
+    }
+     
+    return L;
+  }
+   
+  void display() {
+    stroke(100);
+     
+    // Líneas verticales
+    for (int i = 0; i < num_cellsX-1; i++) {
+      line(margen+margen*i, margen, margen+margen*i, height-cell_size);
+    }
+     
+    // Líneas horizontales
+    for (int j = 0; j < num_cellsY-1; j++) {
+      line(0, margen+margen*j, width, margen+margen*j);
+    }
+     
+    noStroke();
+  }
+}
+
+class Particle {
+   
+  PVector location;
+  float diameter;
+  float mass;
+  PVector velocity;
+  PVector acceleration;
+  int id;
+  ArrayList<Particle> vecinos;
+  int celdaActual;
+  
+  Particle(float xin, float yin, float din, int idin) {
+    location = new PVector(xin, yin);
+    velocity = new PVector(0, 0);
+    acceleration = new PVector(0, 0);
+    diameter = din;
+    mass = din;
+    id = idin;
+  }
+   
+  void setVecinos() {
+    vecinos = grid.getVecinos(location);
+  }
+   
+  void collide1() {
+     for (Particle particle : vecinos) {
+      if (particle.id > id) {
+        PVector d = PVector.sub(particle.location, location);
+        float distance = d.mag();
+        float minDist = particle.diameter/2 + diameter/2;
+        if (distance < minDist) {
+          PVector normal1 = PVector.mult(d.normalize(null), PVector.dot(velocity, d) / distance);
+          PVector tangencial1 = PVector.sub(velocity, normal1);
+          PVector normal2 = PVector.mult(d.normalize(null), PVector.dot(particle.velocity, d) / distance);
+          PVector tangencial2 = PVector.sub(particle.velocity, normal2);
+           
+          // Restitución
+          float L = minDist - distance;
+          float vrel = PVector.sub(normal1, normal2).mag();
+          if (vrel < 20)
+            vrel = 20;
+          location = PVector.add(PVector.mult(normal1, -L/vrel), location);
+           
+          // Velocidad de salida
+          float u1 = PVector.dot(normal1, d) / distance;
+          float u2 = PVector.dot(normal2, d) / distance;
+          float v1 = ((mass - particle.mass)*u1 + 2*particle.mass*u2) / (mass + particle.mass);
+          float v2 = ((particle.mass - mass)*u2 + 2*mass*u1) / (mass + particle.mass);
+          PVector normal1_ = PVector.mult(d.normalize(null), v1);
+          PVector normal2_ = PVector.mult(d.normalize(null), v2);
+          velocity = PVector.add(normal1_, tangencial1);
+          particle.velocity = PVector.add(normal2_, tangencial2);
+           
+          velocity = PVector.mult(velocity, 0.99);
+          particle.velocity = PVector.mult(particle.velocity, 0.99);
+        }
+      }
+    }
+  }
+   
+  void collide2() {
+    for (Particle particle : vecinos) {
+      if (particle.id > id) {
+        PVector d = PVector.sub(particle.location, location);
+        float distance = d.mag();
+        float minDist = particle.diameter/2 + diameter/2;
+        if (distance < minDist) {
+          float angle = atan2(d.y, d.x);
+          PVector target = new PVector(0, 0);
+          target.x = location.x + cos(angle) * minDist;
+          target.y = location.y + sin(angle) * minDist;
+          PVector acc = PVector.mult(PVector.sub(target, particle.location), spring);
+          velocity = PVector.sub(velocity, acc);
+          particle.velocity = PVector.add(particle.velocity, acc);
+           
+          velocity = PVector.mult(velocity, friction);
+          particle.velocity = PVector.mult(particle.velocity, friction);
+        }
+      }
+    }  
+  }
+   
+  void move() {
+    applyForce(gravity);
+    velocity = PVector.add(PVector.mult(acceleration, dt), velocity);
+    location = PVector.add(PVector.mult(velocity, dt), location);
+    for (int i = 0; i < cubeta.planos.size(); i++) {
+      cubeta.planos.get(i).checkCollision(this);
+    }
+     
+    acceleration.set(0.0, 0.0);
+  }
+   
+  void applyForce(PVector force) {
+    PVector f = force.get();
+    f.div(mass);
+    acceleration.add(f);
+  }
+   
+  void display() {
+    fill(colores[celdaActual%6]);
+    ellipse(location.x, location.y, diameter, diameter);
+  }
+}
+
+class Plano {
+  PVector p1;
+  PVector p2;
+  PVector vector;
+  PVector normal;
+   
+  Plano(int x1, int y1, int x2, int y2) {
+    p1 = new PVector(x1, y1);
+    p2 = new PVector(x2, y2);
+    vector = PVector.sub(p2, p1);
+    normal = new PVector(-vector.y, vector.x);
+    normal.normalize();
+  }
+   
+  void display() {
+    stroke(255);
+    line(p1.x, p1.y, p2.x, p2.y);
+    noStroke();
+  }
+ 
+  void checkCollision(Particle p) {
+    // Vector que une la partícula con un punto cualquiera del plano
+    PVector diff = PVector.sub(p.location, p1);
+    float d = PVector.dot(diff, normal) - p.diameter/2.0;
+ 
+    if (d < 0) {
+      // Hay colisión       
+      PVector ds = PVector.mult(normal, d);
+      p.location = PVector.sub(p.location, ds);
+       
+      float nv = PVector.dot(p.velocity, normal);
+      PVector vn = PVector.mult(normal, nv);
+      PVector vt = PVector.sub(p.velocity, vn);
+      p.velocity = PVector.mult(PVector.sub(vt, vn), friction);
+    }
+  }
+}
